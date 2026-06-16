@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ticket Triage</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #273449;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --danger: #f87171;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 32px 48px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .card h2 { margin: 0 0 16px; font-size: 15px; font-weight: 600; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+    input, textarea, select {
+      width: 100%;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 9px 11px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 110px; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    button {
+      margin-top: 16px;
+      background: var(--accent);
+      color: #06283d;
+      border: 0;
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .result { margin-top: 4px; }
+    .field { margin-bottom: 14px; }
+    .field .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .field .v { font-size: 15px; margin-top: 2px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge.ok { background: rgba(52,211,153,0.15); color: var(--ok); }
+    .badge.danger { background: rgba(248,113,113,0.15); color: var(--danger); }
+    .draft {
+      white-space: pre-wrap;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .sources { margin-top: 6px; padding-left: 0; list-style: none; }
+    .sources li { font-size: 13px; color: var(--muted); padding: 3px 0; }
+    .sources code { color: var(--accent); }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .metric .k { font-size: 11px; color: var(--muted); }
+    .metric .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .err { color: var(--danger); font-size: 13px; margin-top: 10px; }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Ticket Triage</h1>
+    <p>Classify a support ticket, predict escalation, and draft a grounded first reply.</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>New ticket</h2>
+      <label for="title">Title</label>
+      <input id="title" value="Refund not received" />
+      <label for="body">Body</label>
+      <textarea id="body">I cancelled my subscription but the refund has not arrived. This is urgent.</textarea>
+      <div class="row">
+        <div>
+          <label for="product">Product (optional)</label>
+          <select id="product">
+            <option value="">-</option>
+            <option value="web">web</option>
+            <option value="mobile">mobile</option>
+            <option value="api">api</option>
+          </select>
+        </div>
+        <div>
+          <label for="tier">Customer tier (optional)</label>
+          <select id="tier">
+            <option value="">-</option>
+            <option value="free">free</option>
+            <option value="pro">pro</option>
+            <option value="enterprise">enterprise</option>
+          </select>
+        </div>
+      </div>
+      <button id="triageBtn" onclick="runTriage()">Triage ticket</button>
+      <div id="triageErr" class="err"></div>
+    </section>
+
+    <section class="card">
+      <h2>Result</h2>
+      <div id="result" class="result"><span class="muted">Submit a ticket to see the triage output.</span></div>
+    </section>
+
+    <section class="card" style="grid-column: 1 / -1;">
+      <h2>Model evaluation</h2>
+      <p class="muted">Runs the offline evaluation over the historical dataset.</p>
+      <button class="secondary" id="evalBtn" onclick="runEval()">Run evaluation</button>
+      <div id="evalErr" class="err"></div>
+      <div id="metrics" class="metrics" style="margin-top: 16px;"></div>
+    </section>
+  </main>
+
+  <script>
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+      });
+    }
+
+    async function runTriage() {
+      var btn = document.getElementById('triageBtn');
+      var err = document.getElementById('triageErr');
+      var out = document.getElementById('result');
+      err.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Working...';
+      try {
+        var payload = {
+          title: document.getElementById('title').value,
+          body: document.getElementById('body').value,
+          product: document.getElementById('product').value || null,
+          customer_tier: document.getElementById('tier').value || null
+        };
+        var res = await fetch('/triage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var d = await res.json();
+        var escBadge = d.will_escalate
+          ? '<span class="badge danger">will escalate</span>'
+          : '<span class="badge ok">no escalation</span>';
+        var sources = (d.sources || []).map(function (s) {
+          return '<li><code>' + esc(s.source_id) + '</code> (' + esc(s.source_type) +
+                 ', relevance ' + s.score + ')</li>';
+        }).join('');
+        out.innerHTML =
+          '<div class="field"><div class="k">Category</div><div class="v">' + esc(d.category) +
+          ' <span class="muted">(confidence ' + d.confidence + ')</span></div></div>' +
+          '<div class="field"><div class="k">Alternatives</div><div class="v">' +
+          esc((d.top_alternatives || []).join(', ')) + '</div></div>' +
+          '<div class="field"><div class="k">Escalation</div><div class="v">' + escBadge +
+          ' <span class="muted">p=' + d.escalation_probability + '</span></div>' +
+          '<div class="muted">' + esc(d.escalation_rationale) + '</div></div>' +
+          '<div class="field"><div class="k">Draft reply</div><div class="draft">' +
+          esc(d.draft_reply) + '</div></div>' +
+          '<div class="field"><div class="k">Sources</div><ul class="sources">' +
+          (sources || '<li>none</li>') + '</ul></div>' +
+          '<div class="muted">Latency: ' + d.latency_ms + ' ms</div>';
+      } catch (e) {
+        err.textContent = 'Triage failed: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Triage ticket';
+      }
+    }
+
+    async function runEval() {
+      var btn = document.getElementById('evalBtn');
+      var err = document.getElementById('evalErr');
+      var box = document.getElementById('metrics');
+      err.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Running...';
+      try {
+        var res = await fetch('/evaluate', { method: 'POST' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var m = await res.json();
+        var items = [
+          ['Routing accuracy', m.routing_accuracy],
+          ['Escalation precision', m.precision],
+          ['Escalation recall', m.recall],
+          ['Escalation F1', m.f1],
+          ['Escalation ROC-AUC', m.roc_auc],
+          ['Groundedness', m.groundedness],
+          ['TTFR saved (min)', m.ttfr_minutes_saved],
+          ['Cost / 100 tickets ($)', m.cost_per_100_tickets_usd]
+        ];
+        box.innerHTML = items.map(function (it) {
+          return '<div class="metric"><div class="k">' + it[0] +
+                 '</div><div class="v">' + it[1] + '</div></div>';
+        }).join('');
+      } catch (e) {
+        err.textContent = 'Evaluation failed: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run evaluation';
+      }
+    }
+  </script>
+</body>
+</html>
